@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang=en>
+<title>404 Not Found</title>
+<h1>Not Found</h1>
+<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>
+HTTP/1.0 200 OK
+Server: BaseHTTP/0.6 Python/3.8.17
+Date: Fri, 08 Dec 2023 08:25:42 GMT
+Content-type: text/html
+
+<!doctype html>
+<html lang=en>
+<title>404 Not Found</title>
+<h1>Not Found</h1>
+<p>The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.</p>

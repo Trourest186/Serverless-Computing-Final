@@ -1,0 +1,22 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: detection1
+  namespace: serverless
+spec:
+  template:
+    spec:
+      containers:
+        - name: http-server
+          image: trourest186/httpserver
+          ports:
+            - containerPort: 80
+        - name: application-servreless
+          image: trourest186/detect_abnormal:v20.0
+        - name: application-serverless2
+          image: trourest186/giang3:v15.0
+
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
