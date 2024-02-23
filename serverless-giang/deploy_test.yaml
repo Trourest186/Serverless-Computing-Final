@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: detection1
+  namespace: serverless
+spec:
+  containers:
+  - name: test
+    image: trourest186/test-app
+    ports:
+    - containerPort: 8883
+    env:
+    - name: PORT
+      value: "8884"

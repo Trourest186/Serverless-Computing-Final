@@ -1,0 +1,28 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: detection1
+  namespace: serverless
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/window: 2000s
+    spec:
+      containers:
+      - name: application1
+        image: trourest186/pts:testbed
+        command:
+        - python3
+        args:
+        - main.py
+        resources:
+          limits:
+            cpu: 1000m
+        ports:
+        - containerPort: 8881
+        env:
+        - name: FILE_NAME
+          value: '1_1_1'
+      nodeSelector:
+        kubernetes.io/hostname: mec

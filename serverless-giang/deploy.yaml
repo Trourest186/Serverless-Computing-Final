@@ -1,0 +1,125 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: detection1
+  namespace: serverless
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/window: 100s
+    spec:
+      containers:
+      - image: trourest186/multiple_process@sha256:70c4a7d9fd23a17e3e261f1c7ab727ee061db9547692e8bc4e6349fc10c6ac2e
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 1000m
+      nodeSelector:
+        kubernetes.io/hostname: mec
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: detection2
+  namespace: serverless
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/window: 100s
+    spec:
+      containers:
+      - image: trourest186/multiple_process@sha256:70c4a7d9fd23a17e3e261f1c7ab727ee061db9547692e8bc4e6349fc10c6ac2e
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 1000m
+      nodeSelector:
+        kubernetes.io/hostname: mec
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: detection3
+  namespace: serverless
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/window: 100s
+    spec:
+      containers:
+      - image: trourest186/multiple_process@sha256:70c4a7d9fd23a17e3e261f1c7ab727ee061db9547692e8bc4e6349fc10c6ac2e
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 1000m
+      nodeSelector:
+        kubernetes.io/hostname: mec
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: detection4
+  namespace: serverless
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/window: 100s
+    spec:
+      containers:
+      - image: trourest186/multiple_process@sha256:70c4a7d9fd23a17e3e261f1c7ab727ee061db9547692e8bc4e6349fc10c6ac2e
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 1000m
+      nodeSelector:
+        kubernetes.io/hostname: mec
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: detection5
+  namespace: serverless
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/window: 100s
+    spec:
+      containers:
+      - image: trourest186/multiple_process@sha256:70c4a7d9fd23a17e3e261f1c7ab727ee061db9547692e8bc4e6349fc10c6ac2e
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 1000m
+      nodeSelector:
+        kubernetes.io/hostname: mec
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: detection6
+  namespace: serverless
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/window: 100s
+    spec:
+      containers:
+      - image: trourest186/multiple_process@sha256:70c4a7d9fd23a17e3e261f1c7ab727ee061db9547692e8bc4e6349fc10c6ac2e
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            cpu: 1000m
+      nodeSelector:
+        kubernetes.io/hostname: mec
