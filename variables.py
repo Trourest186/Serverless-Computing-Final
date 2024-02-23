@@ -21,11 +21,12 @@ MEC_PASSWORD = "1"
 JETSON_USERNAME = 'end'
 JETSON_PASSWORD = "1"
 # STREAMING_IP = "172.16.42.11"
-STREAMING_IP = "192.168.2.2"
+STREAMING_IP = "172.16.42.13"
 NAMESPACE = "serverless"
 
 # CONTAINER COUNT
-CONTAINER_COUNT = 3
+CONTAINER_COUNT = 1 # Change in multiple_container
+STREAMING_COUNT = 1
 
 # PORT
 PROMETHEUS_PORT = "9090"
@@ -49,10 +50,10 @@ HEAVY_DNS = "http://detection{}.serverless.svc.cluster.local"
 
 # Measurement parameters
 STATE_COLLECT_TIME = 60  # 60
-CURL_COLLECT_TIME = 100
+CURL_COLLECT_TIME = 50 # Change
 NULL_CALCULATION_TIME = 10
 # ACTIVE_CALCULATION_TIME = 30
-DETECTION_TIME = 1000  # 200
+DETECTION_TIME = 200  # 200 # Change for spwaning time and complete time
 LIVE_TIME = 300  # 240
 IMAGE_QUALITY = "2K"
 
@@ -60,8 +61,9 @@ IMAGE_QUALITY = "2K"
 VALUES_CPU_QUERY = "100-(avg%20by%20(instance,job)(irate(node_cpu_seconds_total{{mode='idle',job='prometheus',instance='{}:9100'}}[30s])*100))"
 # 100-(avg%20by%20(instance,job)(irate(node_cpu_seconds_total{mode='idle',job='prometheus',instance='172.16.42.12:9100'}[30s])*100))
 VALUES_MEMORY_QUERY = "((node_memory_MemTotal_bytes{{job='prometheus',instance='{}:9100'}}-node_memory_MemAvailable_bytes{{job='prometheus',instance='{}:9100'}})/(node_memory_MemTotal_bytes{{job='prometheus',instance='{}:9100'}}))*100"
-VALUES_NETWORK_RECEIVE_QUERY = "rate(node_network_receive_bytes_total{{device='" + \
-    NETWORK_INTERFACE+"',instance='{}:9100'}}[1m])/(1024*1024)"
+# VALUES_NETWORK_RECEIVE_QUERY = "rate(node_network_receive_bytes_total{{device='" + \
+#     NETWORK_INTERFACE+"',instance='{}:9100'}}[1m])/(1024*1024)"
+VALUES_NETWORK_RECEIVE_QUERY = "sum(rate(node_network_transmit_bytes_total{{instance='{}:9100'}}[30s])+rate(node_network_receive_bytes_total{{instance='{}:9100'}}[30s]))/(1024*1024)".format(MEC_IP, MEC_IP)
 # VALUES_GPU_QUERY = "gpu_utilization{{device='jetson',instance='{}:9100',job='prometheus'}}"
 VALUES_GPU_QUERY_MEC = "nvidia_smi_utilization_gpu_ratio{{instance='{}:9835'}}"
 VALUES_GPU_QUERY_JETSON = "gpu_utilization_percentage_Hz{{instance='{}:9200',nvidia_gpu='utilization'}}"
@@ -81,8 +83,10 @@ VALUES_GPU_QUERY_JETSON = "gpu_utilization_percentage_Hz{{instance='{}:9200',nvi
 DEFAULT_DIRECTORY = os.getcwd()
 DATA_DIRECTORY = DEFAULT_DIRECTORY + "/data/"
 DEPLOYMENT_PATH = DEFAULT_DIRECTORY + "/deploy.yaml"
+
 TEMPLATE_PATH = DEFAULT_DIRECTORY + "/template.yaml"
 TEMPLATE_PATH2 = DEFAULT_DIRECTORY + "/template2.yaml"
+TEMPLATE_PATH3 = DEFAULT_DIRECTORY + "/template3.yaml"
 
 DATA_PROMETHEUS_FILE_DIRECTORY = DEFAULT_DIRECTORY + \
     "/data/resource/{}/{}_pod_{}_rep_{}_{}.csv"
@@ -92,6 +96,12 @@ DATA_CURL_FILE_DIRECTORY = DEFAULT_DIRECTORY + \
     "/data/curl/{}/{}_pod_{}_rep_{}_{}.csv"
 DATA_FPS_FILE_DIRECTORY = DEFAULT_DIRECTORY + \
     "/data/fps/{}/pod_{}_rep_{}_#pod_{}_{}.log"
+DATA_COMPLETE_TIME_DIRECTORY = DEFAULT_DIRECTORY + \
+    "/data/complete_time/{}/{}/storage_{}.csv"
+DATA_BENCHMARKING = DEFAULT_DIRECTORY + \
+    "/data/benchmarking/benchmarking_score.csv"
+
+BENCHMARKING_DIRECTORY = "/home/kien/storage/test-results"
 # POD_START_TIME_DATA_FILE_DIRECTOR = DATA_DIRECTORY + POD_START_TIME_FILENAME
 BASH_PATH = DEFAULT_DIRECTORY + "/deployments"
 # DATA_PROMETHEUS_AT_PI4_FILE_DIRECTORY = DATA_DIRECTORY + \
@@ -123,16 +133,15 @@ PROXY_IMAGE_NAME = "b371fa5b70540"
 # LIGHT_IMAGE_NAME_X86_TEST = "trourest186/detect_abnormal:v20.0@sha256:ede349c949a82dd368aa0ff243ecfdaf9a589b0d344187582c532010ed4eaa53" # For Chau image (final!)
 LIGHT_IMAGE_NAME_X86_TEST = "trourest186/giang:v15.0@sha256:f1253877e8eeee2633ea4f170eade63019d13a1dd4527d167d782d3c04479b5f"
 
-# Use for multiple container in a pod
 # HTTP_SERVER_IMAGE_NAME_X86 = "trourest186/httpserver_final"
 # APP1_IMAGE_NAME_X86 = "trourest186/application_final"
-MULTIPLE_CONTAINER_IMAGE_NAME_X86 = "trourest186/multiple_container"
-MULTIPLE_PROCESS_IMAGE_NAME_X86 = "trourest186/multiple_process"
-MULTIPLE_POD_IMAGE_NAME_X86 = "trourest186/multiple_pod"
-MULTIPLE_MIX_IMAGE_NAME_x86 = "trourest186/multiple_mix"
+# MULTIPLE_CONTAINER_IMAGE_NAME_X86 = "trourest186/multiple_container"
+MULTIPLE_PROCESS_IMAGE_NAME_X86 = "trourest186/multiple_process@sha256:70c4a7d9fd23a17e3e261f1c7ab727ee061db9547692e8bc4e6349fc10c6ac2e"
+# MULTIPLE_POD_IMAGE_NAME_X86 = "trourest186/multiple_pod"
+MULTIPLE_MIX_IMAGE_NAME_x86 = "trourest186/multiple_mix@sha256:8a09aac578fefd60887c1b5a5c5dcbd2ee359330e4a8e6f425d2570fe72655a8"
+BENMARKING_IMAGE_NAME_x86 = "trourest186/pts:testbed@sha256:0300fd4d9678b94d6ded753afa2da18e66ddc96771ecfc4dd8ab564b8f52efec"
+CURL_IMAGE_NAME_x86 = "trourest186/architecture_curl@sha256:7d123b981f2d6115126d1c5c07afe19c06dae1c3f7c081d7a54ce9b4acc363ec"
 
-# IMAGE_NAME = HEAVY_IMAGE_NAME_ARM
-# IMAGE_NAME = HEAVY_IMAGE_NAME_X86_WARM_ONLY
 IMAGE_NAME = MULTIPLE_PROCESS_IMAGE_NAME_X86
 # IMAGE_NAME = HEAVY_IMAGE_WARM_ONLY
 # IMAGE_NAME = LIGHT_IMAGE_NAME_X86_TEST
@@ -149,7 +158,7 @@ DELETE_PROXY_IMAGE_CMD = "sudo crictl rmi " + PROXY_IMAGE_NAME
 DELETE_GW = "sudo route del default"
 ADD_GW = "sudo ip route add default via 172.16.42.1"
 
-# Using for multiple pod
+# # Using for multiple pod
 CURL_TERM = "curl http://{}:8080/api/terminate" # When pod is terminated, DNS may be gone, thus IP is preferred
 CURL_ACTIVE = "curl " + HEAVY_DNS + "/api/stream/" + STREAMING_IP + ":" + STREAMING_PORT + "/" + str(DETECTION_TIME)
 # CURL_ACTIVE_INST = "curl " + HEAVY_DNS + "/api/stream/" + STREAMING_IP + ":" + STREAMING_PORT + "/" + str(DETECTION_TIME)+"/0"
@@ -171,7 +180,7 @@ CURL_FPS = "curl http://detection{}.serverless.svc.cluster.local/download -o fil
 # CURL_RESPONSE_TIME = "curl -F upload=@{}.jpg -w \"@curl-time.txt\"  " + HEAVY_DNS + "/api/picture"
 # CURL_FPS = "curl http://detection{}.serverless.svc.cluster.local/download -o file{}.log"
 
-# # Using for multiple container
+# # Using for multiple container and multiple mix
 # CURL_TERM = "curl " +  "{}" + ":" + "{}" + "/api/terminate"
 # CURL_ACTIVE = "curl " + "{}" + ":" + "{}" + "/api/stream/" + STREAMING_IP + ":" + STREAMING_PORT + "/" + str(DETECTION_TIME)
 # # CURL_ACTIVE_INST = "curl " + {} + ":" + {} + "/api/stream/" + STREAMING_IP + ":" + "{}" + "/" + str(DETECTION_TIME)+"/0"
@@ -214,6 +223,7 @@ COMPLETE_TASK_TIME = "complete_task_time"
 MULTIPLE_CONTAINER = "multiple_container"
 MULTIPLE_POD = "multiple_pod"
 MULTIPLE_PROCESS = "multiple_process"
+MULTIPLE_MIX = "multiple_mix"
 
 image_quality = {
     "SD": "./image/SD.jpg",

@@ -4,4 +4,4 @@ metadata:
  name: config-autoscaler
  namespace: knative-serving
 data:
- enable-scale-to-zero: "false"
+ enable-scale-to-zero: "true"

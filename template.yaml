@@ -10,9 +10,9 @@ spec:
         autoscaling.knative.dev/window: 6s
     spec:
       containers:
-      - image: image
+      - image: trourest186/multiple_process@sha256:70c4a7d9fd23a17e3e261f1c7ab727ee061db9547692e8bc4e6349fc10c6ac2e
         resources:
-          requests:
+          limits:
             cpu: "1000m"
         ports:
         - containerPort: 8080

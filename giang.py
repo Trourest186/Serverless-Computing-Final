@@ -1,3 +1,2 @@
-target_pod = 3
-for i in range(1, target_pod + 1, 1):
-    print(i)
+y = 1704021419.5829077 - 1704021411.4423895
+print(float(y))

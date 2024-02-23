@@ -333,9 +333,9 @@ def update_multi_container_deployment(target_pods_scale: int, image: str, host: 
                     for i in range(1, CONTAINER_COUNT):
                         additional_container = {
                             "name": f"application{i + 1}",
-                            "image": 'trourest186/multiple_mix',
+                            "image": MULTIPLE_MIX_IMAGE_NAME_x86,
                             "resources": {
-                                "requests": {
+                                "limits": {
                                     "cpu": "1000m"
                                 }
                             },
@@ -355,6 +355,54 @@ def update_multi_container_deployment(target_pods_scale: int, image: str, host: 
             yaml.dump_all(new_deployment, yaml_file, default_flow_style=False, sort_keys=False)
     except yaml.YAMLError as exc:
         print(exc)
+
+def update_benchmark_deployment(numPods: int, numContainers: int, numProcesses: int, image: str, host: str, path_file_deploy: str = TEMPLATE_PATH3):
+    try:
+        new_deployment = []
+        for index in range(0, numPods, 1 ):
+            docs = list(yaml.load_all(open(path_file_deploy, "r"), Loader=yaml.SafeLoader))
+            for doc in docs:
+                if doc.get("apiVersion") == "serving.knative.dev/v1" and doc.get("kind") == "Service":
+                    cpu_request = str(1000*numProcesses) + 'm'
+
+                    doc["metadata"]["name"] = "detection" + str(index + 1)
+                    doc["spec"]["template"]["metadata"]["annotations"]["autoscaling.knative.dev/window"] = "60s"
+                    doc["spec"]["template"]["spec"]["containers"][0]["image"] = image
+                    doc["spec"]["template"]["spec"]["nodeSelector"]["kubernetes.io/hostname"] = str(host)
+                    doc["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]["cpu"] = cpu_request
+                    doc["spec"]["template"]["spec"]["containers"][0]["args"] = ["FORCE_TIMES_TO_RUN=1 MONITOR=cpu.power,cpu.temp,cpu.usage TEST_RESULTS_NAME=TESTTEST{}_{} ./phoronix-test-suite/phoronix-test-suite batch-run encode-flac-1.7.0; sshpass -p 'kienlu123' scp -r /var/lib/phoronix-test-suite/test-results/ kien@172.16.42.11:~/storage/".format(index + 1, 0)]
+                    if numContainers > 1:
+                        for i in range(1, numContainers):
+                            commad_add = f"FORCE_TIMES_TO_RUN=1 MONITOR=cpu.power,cpu.temp,cpu.usage TEST_RESULTS_NAME=TESTTEST{index+1}_{i} ./phoronix-test-suite/phoronix-test-suite batch-run encode-flac-1.7.0; sshpass -p 'kienlu123' scp -r /var/lib/phoronix-test-suite/test-results/ kien@172.16.42.11:~/storage/"
+                            additional_container = {
+                                "name": f"application{i + 1}",
+                                "image": BENMARKING_IMAGE_NAME_x86,
+                                "resources": {
+                                    "limits": {
+                                        "cpu": cpu_request
+                                    }
+                                },
+                                "env": [
+                                    {
+                                        "name": "PORT",
+                                        "value": str(8881 + i)
+                                    }
+                                ],
+                                "command": ["/bin/bash", "-c"],
+                                "args": [
+                                    commad_add
+                                ]
+                            }
+                            doc["spec"]["template"]["spec"]["containers"].append(additional_container)
+                    new_deployment.append(doc)
+                    break
+
+        with open(DEPLOYMENT_PATH, 'w') as yaml_file:
+            yaml.dump_all(new_deployment, yaml_file, default_flow_style=False, sort_keys=False)
+    except yaml.YAMLError as exc:
+        print(exc)
+
+
 # Giang
 def update_multi_mix_deployment(numPods: int, numContainers: int, numProcesses: int, image: str, host: str, path_file_deploy: str = TEMPLATE_PATH2):
     try:
@@ -369,16 +417,16 @@ def update_multi_mix_deployment(numPods: int, numContainers: int, numProcesses: 
                     doc["spec"]["template"]["metadata"]["annotations"]["autoscaling.knative.dev/window"] = "60s"
                     doc["spec"]["template"]["spec"]["containers"][0]["image"] = image
                     doc["spec"]["template"]["spec"]["nodeSelector"]["kubernetes.io/hostname"] = str(host)
-                    doc["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"]["cpu"] = cpu_request
+                    doc["spec"]["template"]["spec"]["containers"][0]["resources"]["limits"]["cpu"] = cpu_request
                     
                     # doc["spec"]["template"]["spec"]["containers"][0]["env"][0]["value"] = str(target_pods_scale)
                     if numContainers > 1:
                         for i in range(1, numContainers):
                             additional_container = {
                                 "name": f"application{i + 1}",
-                                "image": image,
+                                "image": MULTIPLE_MIX_IMAGE_NAME_x86,
                                 "resources": {
-                                    "requests": {
+                                    "limits": {
                                         "cpu": cpu_request
                                     }
                                 },

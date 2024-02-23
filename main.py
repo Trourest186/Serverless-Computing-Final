@@ -18,6 +18,7 @@ import signal
 from functional_methods import *
 from collect_data import *
 from variables import *
+import shutil
 
 
 # def collect_life_cycle_mem(host: str, image: str, target_pods: int, repetition: int, event):  # Freeze MEM only
@@ -66,7 +67,8 @@ def collect_cold_warm_disk(host: str, image: str, target_pods: int, repetition: 
     timestamps = {}
     # k8s_API.config_image(WRONG_IMAGE_NAME)
     # k8s_API.update_deployment(target_pods, "null", "mec", DEFAULT_DIRECTORY + "/template1.yaml")
-    remote_worker_call(DELETE_IMAGE_CMD, JETSON_USERNAME, JETSON_IP, JETSON_PASSWORD)
+    # remote_worker_call(DELETE_IMAGE_CMD, JETSON_USERNAME, JETSON_IP, JETSON_PASSWORD)
+    remote_worker_call(DELETE_IMAGE_CMD, MEC_USERNAME, MEC_IP, MEC_PASSWORD)
     sleep(10)
     k8s_API.config_image(IMAGE_NAME)
     k8s_API.config_live_time(100)
@@ -76,16 +78,23 @@ def collect_cold_warm_disk(host: str, image: str, target_pods: int, repetition: 
     timestamps["cold_to_warm_disk_end"] = time.time()
     timestamps_to_file(host, image, timestamps, target_pods, repetition)
     config_deploy("delete")
+    # sleep(5)
     while (k8s_API.get_number_pod(NAMESPACE) != 0):
         print("Waiting for pod to be terminated")
         sleep(5)
+
+    # while (k8s_API.get_number_pod(NAMESPACE) != 0):
+    #     print("Waiting for pod to be terminated")
+    #     command = "kubectl delete pod --all -n serverless --force --grace-period 0"
+    #     output, error = execute_kubectl_command(command)
+    #     sleep(5)
     print("There is no pod in the system.")
     sleep(10)
     event.set()
     print("Measurement finished.")
     print("Saving timestamps..")
     print("Finished!")
-
+    
 ############################################################################
 ############################################################################
 
@@ -131,7 +140,7 @@ def collect_life_cycle(host: str, image: str, target_pods: int, repetition: int,
             k8s_API.get_number_pod(NAMESPACE)))
     while (k8s_API.get_number_pod(NAMESPACE) != 0):
         sleep(10)
-    print("There is no pod in the system")
+    print("There is no pod in the syste'm")
     # NOTE: Warm disk state
     k8s_API.config_image(IMAGE_NAME)
     # change live-time to minimum value = 20s
@@ -277,108 +286,76 @@ def collect_life_cycle(host: str, image: str, target_pods: int, repetition: int,
 ############################################################################
 # ############################################################################
 
-# def curl_latency(host: str, image: str, list_quality: list, target_pods: int, repetition: int, event):
-#     # this function measure the curltime at each 
-#     # lifecycle state of a serverless function
-#     # It has been tested that we can not curl from
-#     # Cold state, so everything starts at Warm Disk
-#     # RESPONSE_URL = CURL_RESPONSE_HEAVY.format(quality)
-#     # print("current URL is: {}".format(RESPONSE_URL))
-#     k8s_API.config_image(IMAGE_NAME)
-#     k8s_API.config_live_time(60) 
-#     config_deploy("deploy") 
+def curl_latency(host: str, image: str, list_quality: list, target_pods: int, repetition: int, event):
+    # this function measure the curltime at each 
+    # lifecycle state of a serverless function
+    # It has been tested that we can not curl from
+    # Cold state, so everything starts at Warm Disk
+    # RESPONSE_URL = CURL_RESPONSE_HEAVY.format(quality)
+    # print("current URL is: {}".format(RESPONSE_URL))
+    k8s_API.config_image(IMAGE_NAME)
+    k8s_API.config_live_time(2000) 
+    config_deploy("deploy") 
 
-#     while not k8s_API.is_all_con_ready():
-#         print("Waiting for pod to be ready ...")
-#         sleep(2)
-#     print("Pod is ready!")
-#     sleep(10)
-#     # Warm CPU to Active
-#     print("Start collecting {}!".format(WARM_CPU_TO_ACTIVE_PROCESS))
-#     collect_curl(CURL_TRIGGER_TIME, host, image, target_pods, repetition, WARM_CPU_TO_ACTIVE_PROCESS, "NONE")
-#     print("Finish collecting {}!".format(WARM_CPU_TO_ACTIVE_PROCESS))
-#     for quality in list_quality:
-#         # Response time from Warm CPU
-#         print("Start collecting {} with image quality is {} !".format(RESPOND_TIME_WARM_CPU, quality))
-#         jobs_status[RESPOND_TIME_WARM_CPU] = True
-#         collect_curl(CURL_RESPONSE_TIME.format(quality, "{}"), host, image, target_pods, repetition, RESPOND_TIME_WARM_CPU, quality)
-#         print("Finish collecting {} with image quality is {} !".format(RESPOND_TIME_WARM_CPU, quality))
-#         sleep(10)
-#     print("Finish everything!")
-#     config_deploy("delete") 
-#     sleep(30)
-#     # Warm Disk to Active
-#     # Response time from Warm Disk
-#     # while (k8s_API.get_number_pod(NAMESPACE) != 0):
-#     #     print("Waiting for pod to be terminated")
-#     #     sleep(10)
-#     # print("There is no pod in the system.")
-#     # print("Start collecting {}!".format(WARM_DISK_TO_ACTIVE_PROCESS))
-#     # collect_curl(CURL_INSTANT_HEAVY, host, image, target_pods, repetition, WARM_DISK_TO_ACTIVE_PROCESS)
-#     # print("Finish collecting {}!".format(WARM_DISK_TO_ACTIVE_PROCESS))
+    while not k8s_API.is_all_con_ready():
+        print("Waiting for pod to be ready ...")
+        sleep(2)
+    print("Pod is ready!")
+    sleep(10)
+    # Warm CPU to Active
+    print("Start collecting {}!".format(WARM_CPU_TO_ACTIVE_PROCESS))
+    collect_curl(CURL_TRIGGER_TIME, host, image, target_pods, repetition, WARM_CPU_TO_ACTIVE_PROCESS, "NONE")
+    print("Finish collecting {}!".format(WARM_CPU_TO_ACTIVE_PROCESS))
+    # for quality in list_quality:
+    #     # Response time from Warm CPU
+    #     print("Start collecting {} with image quality is {} !".format(RESPOND_TIME_WARM_CPU, quality))
+    #     jobs_status[RESPOND_TIME_WARM_CPU] = True
+    #     collect_curl(CURL_RESPONSE_TIME.format(quality, "{}"), host, image, target_pods, repetition, RESPOND_TIME_WARM_CPU, quality)
+    #     print("Finish collecting {} with image quality is {} !".format(RESPOND_TIME_WARM_CPU, quality))
+    #     sleep(10)
+    print("Finish everything!")
+    config_deploy("delete") 
+    sleep(30)
+    # Warm Disk to Active
+    # Response time from Warm Disk
+    # while (k8s_API.get_number_pod(NAMESPACE) != 0):
+    #     print("Waiting for pod to be terminated")
+    #     sleep(10)
+    # print("There is no pod in the system.")
+    # print("Start collecting {}!".format(WARM_DISK_TO_ACTIVE_PROCESS))
+    # collect_curl(CURL_INSTANT_HEAVY, host, image, target_pods, repetition, WARM_DISK_TO_ACTIVE_PROCESS)
+    # print("Finish collecting {}!".format(WARM_DISK_TO_ACTIVE_PROCESS))
     
-#     # Response time from Warm Disk
-#     # while (k8s_API.get_number_pod(NAMESPACE) != 0):
-#     #     print("Waiting for pod to be terminated")
-#     #     sleep(10)
-#     # print("There is no pod in the system.")
-#     # print("Start collecting {}!".format(RESPOND_TIME_WARM_DISK))
-#     # collect_curl(RESPONSE_URL, host, image, target_pods, repetition, RESPOND_TIME_WARM_DISK)
-#     # print("Finish collecting {}!".format(RESPOND_TIME_WARM_DISK))
+    # Response time from Warm Disk
+    # while (k8s_API.get_number_pod(NAMESPACE) != 0):
+    #     print("Waiting for pod to be terminated")
+    #     sleep(10)
+    # print("There is no pod in the system.")
+    # print("Start collecting {}!".format(RESPOND_TIME_WARM_DISK))
+    # collect_curl(RESPONSE_URL, host, image, target_pods, repetition, RESPOND_TIME_WARM_DISK)
+    # print("Finish collecting {}!".format(RESPOND_TIME_WARM_DISK))
     
-#     event.set()
-#     print("Measurement finished.")
-#     # Warm Mem to Active - TBD
-#     # From Null/Cold to Active - is sum of normal measurement + curl measurement
-#     # For ex: Null --> Active = Null --> WarmDisk (normal measurement) + WarmDisk --> Active (curl measurement)
+    event.set()
+    print("Measurement finished.")
+    # Warm Mem to Active - TBD
+    # From Null/Cold to Active - is sum of normal measurement + curl measurement
+    # For ex: Null --> Active = Null --> WarmDisk (normal measurement) + WarmDisk --> Active (curl measurement)
 
-# ############################################################################
-# ############################################################################
-# def curl_complete_task(target_pods: int, event):
-#     # Using for multipe_container, multipe_pod
-#     # Finishing time
-
-#     k8s_API.config_image(IMAGE_NAME)
-#     k8s_API.config_live_time(60) 
-#     config_deploy("deploy") 
-
-#     while not k8s_API.is_all_con_ready():
-#         print("Waiting for pod to be ready ...")
-#         sleep(2)
-#     print("Pod is ready!")
-#     sleep(10)
-#     # Warm CPU to Active
-#     exec_pod(CURL_ACTIVE_INST, target_pods, "normal")
-
-#     time.sleep(10)
-
-#     print("Start collecting {}!".format(COMPLETE_TASK_TIME))
-#     start_time = time.time()
-#     while True:
-#         output_func = lambda count: [reach_pod_log(1, i+1) for i in range(count)]
-#         if check_all_elements(output_func(CONTAINER_COUNT)):
-#             print("Correct")
-#             break
-#         else:
-#             continue
-#     end_time = time.time()
-#     print("=================================> Final result:" + str(end_time - start_time + 12))
-
-#     print("Finish collecting {}!".format(COMPLETE_TASK_TIME))
-
-#     print("Finish everything!")
-#     config_deploy("delete") 
-#     sleep(30)
+# # # ############################################################################
+# # # ############################################################################
+  
     
-    
-#     event.set()
-#     print("Measurement finished.")
-def curl_complete_task(target_pods: int, target_containers: int, event):
+# # #     event.set()
+# # #     print("Measurement finished.")
+
+# # Using measure for testcase 1
+def curl_complete_task(target_pods: int, target_containers: int, measurement_type: str, event):
     # Using for multipe_container, multipe_pod
     # Finishing time
+    host = "mec"
 
     k8s_API.config_image(IMAGE_NAME)
-    k8s_API.config_live_time(60) 
+    k8s_API.config_live_time(500) 
     config_deploy("deploy") 
 
     while not k8s_API.is_all_con_ready():
@@ -395,14 +372,22 @@ def curl_complete_task(target_pods: int, target_containers: int, event):
     start_time = time.time()
     while True:
         # Change 3 parameters
-        output_func = output_func = lambda target_pod, count: [reach_pod_log(i+1, j+1, MULTIPLE_POD) for i in range(target_pod) for j in range(count)]
-        if check_all_elements(output_func(target_pods, target_containers)):
+        output_func = lambda target_pod, count: [reach_pod_log(i+1, j+1, measurement_type, 0) for i in range(target_pod) for j in range(count)]
+        if check_all_elements(output_func(target_pods, target_containers), measurement_type, 0):
             print("Correct")
             break
         else:
             continue
     end_time = time.time()
     print("=================================> Final result:" + str(end_time - start_time + 12))
+
+    # Write into file
+    try:
+        with open(DATA_COMPLETE_TIME_DIRECTORY.format(str(host), measurement_type, measurement_type), 'a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([float(end_time - start_time + 12)])
+    except Exception as ex:
+        print(ex)
 
     print("Finish collecting {}!".format(COMPLETE_TASK_TIME))
 
@@ -413,6 +398,121 @@ def curl_complete_task(target_pods: int, target_containers: int, event):
     
     event.set()
     print("Measurement finished.")
+
+# Using measure testcase 2
+# def curl_complete_task(target_pods: int, target_containers: int, tartget_processes: int, measurement_type: str, event):
+#     # Using for multipe_container, multipe_pod
+#     # Finishing time
+
+#     # 2-1-2
+#     # 1-2-2
+#     # 1-1-4
+#     host = "mec"
+
+#     k8s_API.config_image(IMAGE_NAME)
+#     k8s_API.config_live_time(500) 
+#     config_deploy("deploy") 
+
+#     while not k8s_API.is_all_con_ready():
+#         print("Waiting for pod to be ready ...")
+#         sleep(2)
+#     print("Pod is ready!")
+#     sleep(10)
+#     # Warm CPU to Active
+#     exec_pod(CURL_ACTIVE_INST, target_pods, "normal")
+
+#     time.sleep(10)
+
+#     print("Start collecting {}!".format(COMPLETE_TASK_TIME))
+#     start_time = time.time()
+#     while True:
+#         # Change 3 parameters
+#         output_func = lambda target_pod, count: [reach_pod_log(i+1, j+1, measurement_type, int(target_containers)) for i in range(target_pod) for j in range(count)]
+#         # 1 1 
+#         if check_all_elements(output_func(target_pods, target_containers), measurement_type, int(tartget_processes)):
+#             print("Correct")
+#             break
+#         else:
+#             continue
+#     end_time = time.time()
+#     print("=================================> Final result:" + str(end_time - start_time + 12))
+
+#     # Write into file
+#     try:
+#         with open(DATA_COMPLETE_TIME_DIRECTORY.format(str(host), measurement_type, measurement_type), 'a', newline='') as file:
+#             writer = csv.writer(file)
+#             writer.writerow([float(end_time - start_time + 12)])
+#     except Exception as ex:
+#         print(ex)
+
+#     print("Finish collecting {}!".format(COMPLETE_TASK_TIME))
+
+#     print("Finish everything!")
+#     config_deploy("delete") 
+#     sleep(30)
+    
+    
+#     event.set()
+#     print("Measurement finished.")
+#     sleep(30)
+
+# Using measurement testcase 3
+def collect_benchmark_score(target_pods: int, target_containers: int):
+    host = "mec"
+    remote_worker_call(DELETE_IMAGE_CMD, MEC_USERNAME, MEC_IP, MEC_PASSWORD)
+    sleep(15)
+    k8s_API.config_image(IMAGE_NAME)
+    k8s_API.config_live_time(500)
+    config_deploy("deploy")
+
+    file_benchmark = "/home/kien/storage/test-results/testtest{}{}/composite.xml"
+    file_benchmark_list = [(file_benchmark.format(i + 1, j)) for i in range(target_pods) for j in range(target_containers)]
+    print(file_benchmark_list)
+
+    while True:
+        check_all_files = all(os.path.exists(file) for file in file_benchmark_list)
+        if check_all_files:
+            break
+        else:
+            continue
+    sleep(5)
+    result_score = [float(reach_benchmark_score(file)) for file in file_benchmark_list]
+    print(result_score)
+    print("Measurement finished.")
+
+
+    config_deploy("delete")
+    command = "kubectl delete pod --all -n serverless --force --grace-period 0"
+    output, error = execute_kubectl_command(command)
+
+    while (k8s_API.get_number_pod(NAMESPACE) != 0):
+        print("Waiting for pod to be terminated")
+        command = "kubectl delete pod --all -n serverless --force --grace-period 0"
+        output, error = execute_kubectl_command(command)
+        sleep(5)
+    print("There is no pod in the system.")
+    sleep(10)
+    print("Measurement finished.")
+
+    print("Saving benchmarking score...")
+    try:
+        with open(DATA_BENCHMARKING, 'a', newline='') as file:
+            writer = csv.writer(file)
+            writer.writerow([max(result_score)])
+    except Exception as ex:
+        print(ex)
+
+    print("Deleting file benchmarking score")
+    try:
+        # Attempt to remove the directory and its contents
+        shutil.rmtree(BENCHMARKING_DIRECTORY)
+        print(f"Directory '{BENCHMARKING_DIRECTORY}' and its contents have been successfully deleted.")
+    except OSError as e:
+        # Handle the case where directory deletion is unsuccessful
+        print(f"Unable to delete directory '{BENCHMARKING_DIRECTORY}': {e}")
+
+    print("Finished!")
+    sleep(5)
 
 ############################################################################
 ############################################################################

@@ -21,7 +21,12 @@ import k8s_API
 from time import sleep
 import re
 import psutil
-
+import configparser
+import multiprocessing
+import concurrent.futures
+import time
+import xml.etree.ElementTree as ET
+import urllib.parse
 
 def get_bytes():
     return psutil.net_io_counters().bytes_sent + psutil.net_io_counters().bytes_recv
@@ -50,7 +55,7 @@ def remote_worker_call(command: str, host_username: str, host_ip: str, host_pass
         print("Could not SSH to %s, waiting for it to start" % host_ip)
     print(command)
     stdin, stdout, stderr = client.exec_command(command, get_pty=True)
-    stdin.write(JETSON_PASSWORD + '\n')
+    stdin.write(MEC_PASSWORD + '\n')
     stdin.flush()
     for line in stdout:
         print(line.strip('\n'))
@@ -67,6 +72,29 @@ def get_data_from_api(query: str):
     except:
         values = -1
     return values
+
+def get_data_network_from_api(query: str):
+    # Mã hóa URL cho truy vấn
+    query = urllib.parse.quote(query)
+    
+    url_data = PROMETHEUS_DOMAIN + query
+    try:
+        contents = urllib.request.urlopen(url_data).read().decode('utf-8')
+    except urllib.error.HTTPError as e:
+        print(f"HTTP error occurred: {e}")
+        return None
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
+    
+    # Chuyển đổi JSON thành dictionary
+    json_data = json.loads(contents)
+    
+    # Lấy giá trị từ phần tử 'value'
+    value = json_data["data"]["result"][0]['value'][1]
+    return value
+
+
 
 # def get_power():
 #     # print(pw.get_power()/1000.0)
@@ -147,11 +175,12 @@ def get_prometheus_values_and_update_job(host: str, image: str, target_pods: int
         # real_power = 100000
         values_power = real_power/100.0
         values_energy = energy*36 #Convert from Wh --> J
-    values_nw = get_bytes()
+    # values_nw = get_bytes() # Test
+
     values_per_cpu_in_use = get_data_from_api(VALUES_CPU_QUERY.format(ip))
     # values_per_gpu_in_use = get_data_from_api(gpu_query.format(ip))
     values_per_gpu_in_use = [0,0]
-    # values_network_receive = get_data_from_api(VALUES_NETWORK_RECEIVE_QUERY)
+    values_network_receive = get_data_network_from_api(VALUES_NETWORK_RECEIVE_QUERY)
     values_memory = get_data_from_api(
         VALUES_MEMORY_QUERY.format(ip, ip, ip))
     # print(values_memory)
@@ -163,7 +192,7 @@ def get_prometheus_values_and_update_job(host: str, image: str, target_pods: int
         writer = csv.writer(open(DATA_PROMETHEUS_FILE_DIRECTORY.format(
             str(host), str(image), str(target_pods), str(repetition), generate_file_time), 'a'))
         writer.writerow([values_memory[0], datetime.utcfromtimestamp(values_memory[0]).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3], values_running_pods,
-                         values_power, values_energy, values_per_cpu_in_use[1], values_per_gpu_in_use[1], values_memory[1], values_nw, state])
+                         values_power, values_energy, values_per_cpu_in_use[1], values_per_gpu_in_use[1], values_memory[1], values_network_receive, state])
     except Exception as ex:
         print(ex)
     # if TEST_MODE: print("Current pods: %s, target: %d" % (curr_pods, (int(target_pods)+POD_EXSISTED)))
@@ -240,39 +269,57 @@ def auto_delete(target_pod, event):
         # print("In terminating while loop")
     print("Overwatch for termination finished!")
 
-#
-def exec_pod(cmd: str, type: str = "normal"):
-    results = []
-    threads = []
-    IPs = []
-    result_queue = queue.Queue()
-    output_lock = threading.Lock()
-    status = True
-
-    if type == "auto_delete":
-        list_pod = k8s_API.get_list_term_pod(NAMESPACE)
-    else:
-        list_pod = k8s_API.list_namespaced_pod_status(NAMESPACE)
-    
-    for i in list_pod:
-        IP = i.pod_ip
-        if (IP is None):
-            return False, results
+def auto_delete_mix(*target_pod, event):
+    token = True
+    while not event.is_set():
+        if k8s_API.is_pod_terminated() and not k8s_API.is_all_con_not_ready() and token:
+            print("Detect terminating pod, it'll be deleted shortly")
+            if exec_pod(CURL_TERM, *target_pod, type="auto_delete"):
+                token = False
+            else:
+                print("Try to terminate pod, but IP returns None, will try again!")
+                token = True
+        elif not k8s_API.is_pod_terminated():
+            # print("Status is: {}, token is: {}".format(k8s_API.is_pod_terminated(), token))
+            token = True
         else:
-            IPs.append(IP)
-    for ip in IPs:
-        t = threading.Thread(target=connect_pod_exec, args=(cmd.format(ip), result_queue, output_lock, ))
-        threads.append(t)
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+            # print("Status is: {}, token is: {}".format(k8s_API.is_pod_terminated(), token))
+            sleep(1)
+        # print("In terminating while loop")
+    print("Overwatch for termination finished!")
+#
+# def exec_pod(cmd: str, type: str = "normal"):
+#     results = []
+#     threads = []
+#     IPs = []
+#     result_queue = queue.Queue()
+#     output_lock = threading.Lock()
+#     status = True
+
+#     if type == "auto_delete":
+#         list_pod = k8s_API.get_list_term_pod(NAMESPACE)
+#     else:
+#         list_pod = k8s_API.list_namespaced_pod_status(NAMESPACE)
     
-    while not result_queue.empty():
-        result = result_queue.get()
-        results.append(result)
-    status = True
-    return status, results
+#     for i in list_pod:
+#         IP = i.pod_ip
+#         if (IP is None):
+#             return False, results
+#         else:
+#             IPs.append(IP)
+#     for ip in IPs:
+#         t = threading.Thread(target=connect_pod_exec, args=(cmd.format(ip), result_queue, output_lock, ))
+#         threads.append(t)
+#     for t in threads:
+#         t.start()
+#     for t in threads:
+#         t.join()
+    
+#     while not result_queue.empty():
+#         result = result_queue.get()
+#         results.append(result)
+#     status = True
+#     return status, results
     
 # Giang
 def execute_kubectl_command(command):
@@ -280,7 +327,7 @@ def execute_kubectl_command(command):
     output, error = process.communicate()
     return output.decode(), error.decode()
 
-def reach_ip_pod(detection_number, index=0):
+def reach_pod_ip(detection_number, index=0):
     # Construct the kubectl command to get the pods
     command = f"kubectl get pods -n serverless -o wide | awk '/detection{detection_number}/ && $3 == \"Running\" {{print $6}}'"
     
@@ -309,24 +356,42 @@ def reach_pod_name(detection_number, index=0):
     # Return the pod name
     return output.split('\n')[index] if output else None
 
-def reach_pod_log(detection_number, container_number, measurement_type: str):
+def reach_pod_log(detection_number, container_number, measurement_type: str, target_container: int):
     pod_name = reach_pod_name(detection_number)
 
     if measurement_type == "multiple_pod":
         command = f"kubectl logs {pod_name} -n serverless | tail -n 1"
     elif measurement_type == "multiple_container":
         command = f"kubectl logs {pod_name} -n serverless -c application{container_number} | tail -n 1"
+    elif measurement_type == "multiple_mix":
+        # 1-1-4
+        if target_container == 1:
+            command = f"kubectl logs {pod_name} -n serverless | grep -c 'No more'"
+        else:
+            command = f"kubectl logs {pod_name} -n serverless -c application{container_number} | grep -c 'No more'"
     else:
-        pass
+        command = f"kubectl logs {pod_name} -n serverless | grep -c 'No more'"
     
     output, error = execute_kubectl_command(command)
 
     return output
 
-def check_all_elements(array):
-    for element in array:
-        if 'No more frames.' not in element:
-            return False
+def check_all_elements(array, measurement_type: str, tartget_processes: int):
+    count = STREAMING_COUNT
+    if measurement_type == "multiple_pod" or measurement_type == "multiple_container":
+        for element in array:
+            if 'No more frames.' not in element:
+                return False
+    elif measurement_type == "multiple_mix":
+        for element in array:
+            if int(element) != tartget_processes:
+                return False
+    else: 
+        # Multiple processing
+        for element in array:
+            if int(element) != count:
+                return False   
+              
     return True
 
 def case_set(budget: int):
@@ -340,181 +405,269 @@ def case_set(budget: int):
     
     return cases
 
-## Using for multiple pod
+def variable_change(variable_name: str, new_value: int):
+
+    with open("variables.py", "r") as config_file:
+        lines = config_file.readlines()
+
+    for i, line in enumerate(lines):
+        if line.startswith(variable_name):
+            lines[i] = f"{variable_name} = {new_value}\n"
+            break
+
+    with open("variables.py", "w") as config_file:
+        config_file.writelines(lines)
+
+def reach_benchmark_score(file_name: str):
+    # Check the existence of the file
+    if not os.path.exists(file_name):
+        print(f"File '{file_name}' does not exist.")
+        return False
+
+    try:
+        # Parse the XML file
+        tree = ET.parse(file_name)
+        root = tree.getroot()
+        
+        # Find all elements with the tag 'Value'
+        values = root.findall(".//Value")
+        # Print the value of the first element
+        if values:
+            return values[0].text
+        else:
+            print(f"File '{file_name}' does not have results.")
+            return False
+    except ET.ParseError as e:
+        # Handle XML parsing errors
+        print(f"Error parsing XML file '{file_name}': {e}")
+        return False
+    except Exception as e:
+        # Handle other unexpected errors
+        print(f"An error occurred while processing file '{file_name}': {e}")
+        return False
+
+def measure_response_time(architecture_type: str):
+    """Measure the response time based on the type of architecture."""
+
+    # Get the pod name
+    pod_name = reach_pod_name(1)
+
+    if architecture_type == "multiple_process":
+        print("Measuring for MULTIPLE_PROCESS")
+
+        # Execute the start command
+        start_command = f"kubectl exec -it {pod_name} -n serverless -- curl http://127.0.0.1:8080/api/start"
+        execute_kubectl_command(start_command)
+
+        # Execute the response time command and parse the result
+        response_time_command = f"kubectl exec -it {pod_name} -n serverless -- curl http://127.0.0.1:8080/api/response_time"
+        result = execute_kubectl_command(response_time_command)
+        response_time = json.loads(result[0].strip())['response_time']
+
+    elif architecture_type == "multiple_container":
+        print("Measuring for MULTIPLE_CONTAINER")
+
+        # Get the IP of the pod
+        pod_ip = reach_pod_ip(1)
+
+        # Execute the active command and measure the response time
+        active_command = f"kubectl exec -it {pod_name} -c application1 -n serverless -- curl http://{pod_ip}:8882/api/active"
+        start_time = time.time()
+        execute_kubectl_command(active_command)
+        response_time = time.time() - start_time
+
+    else:  # process_type == "multiple_pod"
+        print("Measuring for MULTIPLE_POD")
+
+        # Execute the active command and measure the response time
+        active_command = f"kubectl exec -it {pod_name} -n serverless -- curl http://detection2.serverless.svc.cluster.local/api/active"
+        start_time = time.time()
+        execute_kubectl_command(active_command)
+        response_time = time.time() - start_time
+
+    return response_time
+
+#Using for multiple pod
 def exec_pod(cmd: str, target_pod: int, type: str = "normal"):
     results = []
-    threads = []
+    processes = []
     IPs = []
-    result_queue = queue.Queue()
-    output_lock = threading.Lock()
+    result_queue = multiprocessing.Queue()
+    output_lock = multiprocessing.Lock()
     status = True
 
     if type == "auto_delete":
         list_pod = []
-        while len(list_pod) < target_pod: # when multiple pods are deployed, sometimes the code can't query the number of term pod correctly
+        while len(list_pod) < target_pod:
             list_pod = k8s_API.get_list_term_pod(NAMESPACE)
             print("Query of list_term_pod is {}, while target_pod is {}".format(len(list_pod), target_pod))
         for i in list_pod:
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(i.pod_ip), result_queue, output_lock, ))
-            threads.append(t)
+            p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(i.pod_ip), result_queue, output_lock, ))
+            processes.append(p)
     elif type == "fps":
         for i in range(1, target_pod + 1, 1):
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(i, i), result_queue, output_lock, ))
-            threads.append(t)
+            p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(i, i), result_queue, output_lock, ))
+            processes.append(p)
     else:
         for i in range(1, target_pod + 1, 1):
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(i), result_queue, output_lock, ))
-            threads.append(t)
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+            p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(i), result_queue, output_lock, ))
+            processes.append(p)
+
+    for p in processes:
+        p.start()
+    for p in processes:
+        p.join()
+
     while not result_queue.empty():
         result = result_queue.get()
         results.append(result)
     status = True
     return status, results
-
-## Using for multiple_container
+        
+# Using for multiple container
 # def exec_pod(cmd: str, target_pod: int, type: str = "normal"):
-    results = []
-    threads = []
-    IPs = []
-    result_queue = queue.Queue()
-    output_lock = threading.Lock()
-    status = True
-    target_command = reach_ip_pod(target_pod)
-    target_port = 8881
+#     results = []
+#     processes = []
+#     IPs = []
+#     result_queue = multiprocessing.Queue()
+#     output_lock = multiprocessing.Lock()
+#     status = True
+#     target_command = reach_pod_ip(target_pod)
+#     target_port = 8881
 
-    # container_count = 2 # Need change
-    if type == "auto_delete":
-        list_pod = []
-        while len(list_pod) < target_pod: # when multiple pods are deployed, sometimes the code can't query the number of term pod correctly
-            list_pod = k8s_API.get_list_term_pod(NAMESPACE)
-            print("Query of list_term_pod is {}, while target_pod is {}".format(len(list_pod), target_pod))
-        for i in list_pod:
-            for count in range(0, CONTAINER_COUNT):
-                t = threading.Thread(target=connect_pod_exec, args=(cmd.format(i.pod_ip, target_port + int(count)), result_queue, output_lock, ))
-                threads.append(t)
-    elif type == "fps":
-        for i in range(0, CONTAINER_COUNT):
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(target_command, target_port + int(i), i), result_queue, output_lock, ))
-            threads.append(t)
-    elif type == "trigger":
-        for i in range(1, target_pod + 1, 1):
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(i), result_queue, output_lock, ))
-            threads.append(t)
-    else:
-        for i in range(0, CONTAINER_COUNT):
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(target_command, target_port + int(i) ), result_queue, output_lock, )) # Need fix
-            threads.append(t)
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    while not result_queue.empty():
-        result = result_queue.get()
-        results.append(result)
-    status = True
-    return status, results
+#     if type == "auto_delete":
+#         list_pod = []
+#         while len(list_pod) < target_pod:
+#             list_pod = k8s_API.get_list_term_pod(NAMESPACE)
+#             print("Query of list_term_pod is {}, while target_pod is {}".format(len(list_pod), target_pod))
+#         for i in list_pod:
+#             for count in range(0, CONTAINER_COUNT):
+#                 p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(i.pod_ip, target_port + int(count)), result_queue, output_lock, ))
+#                 processes.append(p)
+#     elif type == "fps":
+#         for i in range(0, CONTAINER_COUNT):
+#             p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(target_command, target_port + int(i), i), result_queue, output_lock, ))
+#             processes.append(p)
+#     elif type == "trigger":
+#         for i in range(1, target_pod + 1, 1):
+#             p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(i), result_queue, output_lock, ))
+#             processes.append(p)
+#     else:
+#         for i in range(0, CONTAINER_COUNT):
+#             p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(target_command, target_port + int(i) ), result_queue, output_lock, )) # Need fix
+#             processes.append(p)
+
+#     for p in processes:
+#         p.start()
+#     for p in processes:
+#         p.join()
+
+#     while not result_queue.empty():
+#         result = result_queue.get()
+#         results.append(result)
+#     status = True
+#     return status, results
 
 # Using for multiple_mix
 # def exec_pod(cmd: str, target_pod: int, type: str = "normal"):
-    numPods = 2
-    numContainers = 1
-    numProcesses = 2
+#     numPods = 4
+#     numContainers = 1
+#     numProcesses = 1
 
-    results = []
-    threads = []
-    IPs = []
-    result_queue = queue.Queue()
-    output_lock = threading.Lock()
-    status = True
-    # target_command = reach_ip_pod()
-    target_port = 8881
+#     results = []
+#     processes = []
+#     result_queue = multiprocessing.Queue()
+#     output_lock = multiprocessing.Lock()
+#     status = True
+#     target_port = 8881
 
-    if type == "auto_delete":
-        list_pod = []
-        while len(list_pod) < numPods: # when multiple pods are deployed, sometimes the code can't query the number of term pod correctly
-            list_pod = k8s_API.get_list_term_pod(NAMESPACE)
-            print("Query of list_term_pod is {}, while target_pod is {}".format(len(list_pod), numPods))
-        for i in list_pod:
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(i.pod_ip), result_queue, output_lock, ))
-            threads.append(t)
-    elif type == "fps":
-        for pod_index in range(1, numPods + 1, 1):
-            target_command = reach_ip_pod(pod_index)
-            for container_index in range(0, numContainers):
-                for i in range(0, numProcesses):
-                    t = threading.Thread(target=connect_pod_exec, args=(cmd.format(target_command, target_port + int(container_index), pod_index, ), result_queue, output_lock, )) # Need fix
-                    threads.append(t)
-    elif type == "trigger":
-        for i in range(1, numPods + 1, 1):
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(i), result_queue, output_lock, ))
-            threads.append(t)
-    else:
-        for pod_index in range(1, numPods + 1, 1):
-            target_command = reach_ip_pod(pod_index)
-            for container_index in range(0, numContainers):
-                for i in range(0, numProcesses):
-                    t = threading.Thread(target=connect_pod_exec, args=(cmd.format(target_command, target_port + int(container_index) ), result_queue, output_lock, )) # Need fix
-                    threads.append(t)
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    while not result_queue.empty():
-        result = result_queue.get()
-        results.append(result)
-    status = True
-    return status, results
+#     if type == "auto_delete":
+#         list_pod = []
+#         while len(list_pod) < numPods:
+#             list_pod = k8s_API.get_list_term_pod(NAMESPACE)
+#             print("Query of list_term_pod is {}, while target_pod is {}".format(len(list_pod), numPods))
+#         for i in list_pod:
+#             for container_index in range(0, numContainers):
+#                 p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(i.pod_ip, target_port + int(container_index) ), result_queue, output_lock, ))
+#                 processes.append(p)
+#     elif type == "fps":
+#         for pod_index in range(1, numPods + 1, 1):
+#             target_command = reach_pod_ip(pod_index)
+#             for container_index in range(0, numContainers):
+#                 for i in range(0, numProcesses):
+#                     p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(target_command, target_port + int(container_index), pod_index, ), result_queue, output_lock, ))
+#                     processes.append(p)
+#     elif type == "trigger":
+#         for i in range(1, numPods + 1, 1):
+#             p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(i), result_queue, output_lock, ))
+#             processes.append(p)
+#     else:
+#         for pod_index in range(1, numPods + 1, 1):
+#             target_command = reach_pod_ip(pod_index)
+#             for container_index in range(0, numContainers):
+#                 for i in range(0, numProcesses):
+#                     p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(target_command, target_port + int(container_index) ), result_queue, output_lock, ))
+#                     processes.append(p)
 
-## Using for multiple processing
+#     for p in processes:
+#         p.start()
+#     for p in processes:
+#         p.join()
+
+#     while not result_queue.empty():
+#         result = result_queue.get()
+#         results.append(result)
+
+#     status = True
+#     return status, results
+
+
+
+#Using for multiple processing
 # def exec_pod(cmd: str, target_pod: int, type: str = "normal"):
-    results = []
-    threads = []
-    streaming_count = 2
-    IPs = []
-    result_queue = queue.Queue()
-    output_lock = threading.Lock()
-    status = True
-    if type == "auto_delete":
-        list_pod = []
-        while len(list_pod) < target_pod: # when multiple pods are deployed, sometimes the code can't query the number of term pod correctly
-            list_pod = k8s_API.get_list_term_pod(NAMESPACE)
-            print("Query of list_term_pod is {}, while target_pod is {}".format(len(list_pod), target_pod))
-        for i in list_pod:
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(i.pod_ip), result_queue, output_lock, ))
-            threads.append(t)
-    elif type == "fps":
-        for i in range(1, streaming_count + 1, 1):
-            index_app = 1 # Default for a only application
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(index_app, index_app), result_queue, output_lock, ))
-            threads.append(t)
-    elif type == "trigger":
-        for i in range(1, streaming_count + 1, 1):
-            index_app = 1 # Default for a only application
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(index_app), result_queue, output_lock, ))
-            threads.append(t)
-    else:
-        for i in range(1, streaming_count + 1, 1):
-            # i reprensent DNS app
-            index_app = 1 # Default for a only application
+#     results = []
+#     processes = []
+#     result_queue = multiprocessing.Queue()
+#     output_lock = multiprocessing.Lock()
+#     status = True
 
-            # index_port: for multiple streaming
-            index_port = int(STREAMING_PORT) + i - 1
-            # t = threading.Thread(target=connect_pod_exec, args=(cmd.format(index_app, str(index_port)), result_queue, output_lock, ))
-            t = threading.Thread(target=connect_pod_exec, args=(cmd.format(index_app), result_queue, output_lock, ))
-            threads.append(t)
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    while not result_queue.empty():
-        result = result_queue.get()
-        results.append(result)
-    status = True
-    return status, results
+#     if type == "auto_delete":
+#         list_pod = []
+#         while len(list_pod) < target_pod:
+#             list_pod = k8s_API.get_list_term_pod(NAMESPACE)
+#             print("Query of list_term_pod is {}, while target_pod is {}".format(len(list_pod), target_pod))
+#         for i in list_pod:
+#             p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(i.pod_ip), result_queue, output_lock, ))
+#             processes.append(p)
+#     elif type == "fps":
+#         for i in range(1, STREAMING_COUNT + 1, 1):
+#             index_app = 1 # Default for a only application
+#             p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(index_app, index_app), result_queue, output_lock, ))
+#             processes.append(p)
+#     elif type == "trigger":
+#         for i in range(1, STREAMING_COUNT + 1, 1):
+#             index_app = 1 # Default for a only application
+#             p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(index_app), result_queue, output_lock, ))
+#             processes.append(p)
+#     else:
+#         for i in range(1, STREAMING_COUNT + 1, 1):
+#             index_app = 1 # Default for a only application
+#             index_port = int(STREAMING_PORT) + i - 1
+#             p = multiprocessing.Process(target=connect_pod_exec, args=(cmd.format(index_app), result_queue, output_lock, ))
+#             processes.append(p)
+
+#     for p in processes:
+#         p.start()
+#     for p in processes:
+#         p.join()
+
+#     while not result_queue.empty():
+#         result = result_queue.get()
+#         results.append(result)
+    
+#     status = True
+#     return status, results
+
 
 def get_fps_exec(host, target_pod, rep):
     try:
